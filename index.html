@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Semáforo del hogar</title>
+<style>
+  :root {
+    --fondo: #f2f2f2;
+    --tarjeta: #ffffff;
+    --texto: #1f1f1f;
+    --suave: #666666;
+    --borde: #c8c8c8;
+    --boton: #333333;
+    --boton-texto: #ffffff;
+    --rojo: #c62828;
+    --amarillo: #f2b200;
+    --verde: #2e7d32;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --fondo: #1a1a1a;
+      --tarjeta: #262626;
+      --texto: #eeeeee;
+      --suave: #aaaaaa;
+      --borde: #444444;
+      --boton: #dddddd;
+      --boton-texto: #111111;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--fondo);
+    color: var(--texto);
+    font: 17px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 440px; margin: 0 auto; padding: 16px 16px 48px; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  header .marca { font-weight: 700; }
+  header .aviso { font-size: 12px; color: var(--suave); border: 1px dashed var(--borde); padding: 2px 6px; }
+  h1 { font-size: 22px; margin: 8px 0 12px; }
+  h2 { font-size: 17px; margin: 18px 0 6px; }
+  p { margin: 8px 0; }
+  .ayuda { color: var(--suave); font-size: 15px; }
+  .tarjeta { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 8px; padding: 12px 14px; margin: 10px 0; }
+  ul { margin: 6px 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  button, .boton {
+    display: block; width: 100%; margin: 8px 0; padding: 13px 14px;
+    font: inherit; text-align: left; cursor: pointer;
+    background: var(--tarjeta); color: var(--texto);
+    border: 1px solid var(--borde); border-radius: 8px; text-decoration: none;
+  }
+  button.principal, .boton.principal { background: var(--boton); color: var(--boton-texto); border-color: var(--boton); text-align: center; font-weight: 600; }
+  button.chico { display: inline-block; width: auto; padding: 6px 10px; font-size: 14px; margin: 0; }
+  .volver { border: none; background: none; padding: 4px 0; width: auto; color: var(--suave); font-size: 15px; margin: 0 0 4px; }
+  .semaforo { border-radius: 8px; padding: 14px; color: #fff; margin: 8px 0 12px; }
+  .semaforo.amarillo { color: #1f1f1f; }
+  .semaforo.rojo { background: var(--rojo); }
+  .semaforo.amarillo { background: var(--amarillo); }
+  .semaforo.verde { background: var(--verde); }
+  .semaforo .nivel { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; opacity: .9; }
+  .semaforo .titulo { font-size: 20px; font-weight: 700; margin-top: 2px; }
+  .luces { display: flex; gap: 6px; margin-bottom: 6px; }
+  .luces span { width: 14px; height: 14px; border-radius: 50%; background: rgba(255,255,255,.35); border: 1px solid rgba(0,0,0,.2); }
+  .luces span.on { background: #fff; }
+  .parar { border-left: 4px solid var(--rojo); padding: 8px 10px; margin: 10px 0; background: var(--tarjeta); }
+  .parar b { color: var(--rojo); }
+  .check { display: flex; gap: 10px; align-items: flex-start; }
+  .check input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
+  pre.ficha { white-space: pre-wrap; font: 14px/1.4 ui-monospace, Menlo, Consolas, monospace; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 8px; padding: 12px; }
+  textarea { width: 100%; min-height: 120px; font: inherit; padding: 10px; border: 1px solid var(--borde); border-radius: 8px; background: var(--tarjeta); color: var(--texto); }
+  .notas { font-size: 13px; color: var(--suave); }
+  .puntaje { display: flex; gap: 6px; }
+  .puntaje button { text-align: center; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  td { border-bottom: 1px solid var(--borde); padding: 4px; vertical-align: top; }
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+const COSTO_EJEMPLO = 'valor de ejemplo para la prueba, no relevado';
+
+const ALARMAS = [
+  { id: 'gas', label: 'Hay olor a gas', ir: 'a_gas' },
+  { id: 'quemado', label: 'Hay olor a quemado, humo o chispas', ir: 'a_quemado' },
+  { id: 'agua', label: 'Hay agua cerca de enchufes o de un aparato enchufado', ir: 'a_agua' },
+  { id: 'corriente', label: 'Algo me dio corriente al tocarlo', ir: 'a_corriente' }
+];
+
+const COMUNES = {
+  a_gas: {
+    tipo: 'resultado', nivel: 'rojo', titulo: 'Puede haber una pérdida de gas', urgente: true,
+    ahora: [
+      'No prendas ni apagues luces ni aparatos, y no uses fuego.',
+      'Si la llave de gas está a mano, cerrala.',
+      'Abrí puertas y ventanas.',
+      'Salí de la casa y llamá desde afuera al 911 o al servicio de emergencia de gas de tu zona.'
+    ],
+    recomendacion: 'Llamá ya a emergencias o a un instalador de gas habilitado.',
+    porque: 'Con olor a gas no hay nada que convenga revisar por tu cuenta.',
+    profesional: 'Servicio de emergencia de gas o instalador de gas habilitado'
+  },
+  a_quemado: {
+    tipo: 'resultado', nivel: 'rojo', titulo: 'Puede haber un problema eléctrico grave', urgente: true,
+    ahora: [
+      'Si hay fuego, salí y llamá a Bomberos al 104.',
+      'Si no hay fuego, bajá la llave general del tablero.',
+      'No desenchufes nada que esté caliente o largando humo.',
+      'No vuelvas a subir la llave hasta que lo vea un electricista.'
+    ],
+    recomendacion: 'Llamá a un electricista autorizado hoy.',
+    porque: 'El olor a quemado o las chispas indican que algo se está recalentando.',
+    profesional: 'Electricista autorizado'
+  },
+  a_agua: {
+    tipo: 'resultado', nivel: 'rojo', titulo: 'Agua y electricidad juntas', urgente: true,
+    ahora: [
+      'No pises el agua ni toques el aparato.',
+      'Si llegás al tablero sin pisar agua, bajá la llave general.',
+      'Cerrá la llave de paso del agua si sabés dónde está.',
+      'Hasta que la luz esté cortada, no seques ni toques nada.'
+    ],
+    recomendacion: 'Con la luz cortada, pedí un electricista o un sanitario según de dónde venga el agua.',
+    porque: 'Mientras haya agua cerca de la electricidad hay riesgo de descarga.',
+    profesional: 'Electricista o sanitario'
+  },
+  a_corriente: {
+    tipo: 'resultado', nivel: 'rojo', titulo: 'Ese aparato puede estar dando corriente', urgente: true,
+    ahora: [
+      'No vuelvas a tocar ese aparato.',
+      'Bajá la llave del tablero que lo alimenta, o la general si no sabés cuál es.'
+    ],
+    sabemos: ['UTE recomienda llamar a un instalador autorizado cuando un aparato da corriente, porque puede ser un problema de aislación o de puesta a tierra.'],
+    recomendacion: 'Llamá a un electricista autorizado.',
+    porque: 'La causa puede estar en el aparato o en la instalación, y las dos se revisan midiendo.',
+    profesional: 'Electricista autorizado'
+  }
+};
+
+const CASOS = {
+  llave: {
+    titulo: 'Salta una llave del tablero',
+    inicio: 'q1', preguntarAlquiler: true,
+    nodos: {
+      q1: { tipo: 'pregunta', texto: '¿La llave vuelve a subir y se queda arriba?', opciones: [
+        { t: 'Sí, sube y se queda', ir: 'q2' },
+        { t: 'No, salta enseguida o no sube', ir: 'r_corto' },
+        { t: 'No sé o no me animo a subirla', ir: 'r_instalacion' }
+      ]},
+      q2: { tipo: 'pregunta', texto: '¿Cuándo salta?', opciones: [
+        { t: 'Cuando prendo un aparato en particular', ir: 'r_aparato' },
+        { t: 'Cuando prendo varios aparatos a la vez', ir: 'r_sobrecarga' },
+        { t: 'Aunque no haya casi nada prendido', ir: 'r_instalacion' },
+        { t: 'No sé', ir: 'r_instalacion' }
+      ]},
+      r_corto: {
+        tipo: 'resultado', nivel: 'rojo', titulo: 'No la vuelvas a subir',
+        ahora: ['Dejá la llave baja.', 'Desenchufá lo que esté conectado en esa parte de la casa.'],
+        sabemos: ['Que la llave salte enseguida indica que hay algo en corto o una falla en la instalación.'],
+        noSabemos: ['Si el problema está en un aparato, en un cable o en la llave misma. Eso se sabe midiendo.'],
+        recomendacion: 'Llamá a un electricista autorizado.',
+        porque: 'Con la instalación en corto no hay comprobaciones seguras que puedas hacer.',
+        profesional: 'Electricista autorizado', costo: '$ 1.500 a $ 3.000 la visita',
+        alquiler: 'Las fallas de la instalación eléctrica en general le corresponden al propietario. Avisale antes de llamar a alguien y mandale la ficha.',
+        segundaOpinion: true
+      },
+      r_instalacion: {
+        tipo: 'resultado', nivel: 'rojo', titulo: 'Es tarea de un electricista',
+        ahora: ['Mientras tanto, desenchufá la computadora y los aparatos delicados.', 'Si salta muy seguido, no dejes aparatos funcionando cuando no estás.'],
+        sabemos: ['Si salta sin que haya mucho consumo, no parece una sobrecarga.'],
+        noSabemos: ['Puede ser un cable con humedad, una llave gastada o un aparato con una fuga. Sin medir no se puede saber cuál.'],
+        recomendacion: 'Pedile a un electricista que revise el tablero y la instalación.',
+        porque: 'Lo que queda por revisar requiere abrir el tablero o medir, y eso no es seguro sin experiencia.',
+        alternativas: ['Anotá qué estaba prendido las últimas veces que saltó. Le va a servir al electricista y queda en la ficha.'],
+        profesional: 'Electricista autorizado', costo: '$ 1.500 a $ 3.000 la visita',
+        alquiler: 'Las fallas de la instalación eléctrica en general le corresponden al propietario. Avisale antes de llamar a alguien y mandale la ficha.',
+        segundaOpinion: true
+      },
+      r_sobrecarga: {
+        tipo: 'resultado', nivel: 'amarillo', titulo: 'Parece una sobrecarga: hay comprobaciones que podés hacer vos',
+        ahora: ['Subí la llave.'],
+        sabemos: ['Lo más probable es que estés usando más potencia de la que soporta ese circuito.'],
+        noSabemos: ['Si la llave es la adecuada para lo que consumís. Eso lo puede ver un electricista.'],
+        recomendacion: 'Repartí el uso de los aparatos que más consumen.',
+        porque: 'Si no se prenden juntos, el circuito no se sobrecarga.',
+        pasos: [
+          { t: 'Anotá qué aparatos estaban prendidos cuando saltó. Los que más consumen suelen ser estufas, aire acondicionado, horno, calefón, plancha y secarropas.', parar: 'alguno de esos aparatos tiene olor a quemado o el enchufe está caliente.', siParar: 'a_quemado' },
+          { t: 'Durante unos días, evitá usar dos de esos aparatos al mismo tiempo.', parar: 'la llave salta aunque haya uno solo de esos aparatos prendido.' }
+        ],
+        finales: [{ t: 'No saltó más', ir: 'resuelto' }, { t: 'Siguió saltando', ir: 'r_instalacion' }],
+        escalar: 'r_instalacion'
+      },
+      r_aparato: {
+        tipo: 'resultado', nivel: 'amarillo', titulo: 'Probablemente el problema esté en ese aparato',
+        ahora: ['Desenchufá ese aparato y volvé a subir la llave.'],
+        sabemos: ['Si la llave solo salta con ese aparato, lo más probable es que la falla esté en el aparato y no en la instalación.'],
+        noSabemos: ['Qué tiene el aparato por dentro. Eso no conviene revisarlo sin experiencia.'],
+        recomendacion: 'Dejá de usar ese aparato y comprobá que sin él no salta.',
+        porque: 'Así sabés si alcanza con arreglar o cambiar el aparato.',
+        pasos: [
+          { t: 'Desenchufá el aparato y subí la llave.', parar: 'la llave no sube o vuelve a saltar enseguida.' },
+          { t: 'Usá la casa normalmente uno o dos días sin ese aparato.', parar: 'la llave salta igual sin el aparato enchufado.' },
+          { t: 'Si querés confirmarlo, enchufalo en otro enchufe de otra parte de la casa y prendelo una vez.', parar: 'el aparato tiene olor a quemado, hace chispas o el enchufe está caliente. En ese caso no lo pruebes.', siParar: 'r_aparato_fin' }
+        ],
+        finales: [{ t: 'Sin el aparato no saltó más', ir: 'r_aparato_fin' }, { t: 'Saltó igual sin el aparato', ir: 'r_instalacion' }],
+        escalar: 'r_instalacion'
+      },
+      r_aparato_fin: {
+        tipo: 'resultado', nivel: 'amarillo', titulo: 'No uses ese aparato hasta que lo revisen',
+        sabemos: ['La falla está en el aparato.'],
+        noSabemos: ['Si se puede arreglar y a qué costo.'],
+        recomendacion: 'Llevalo a un service o consultá al servicio oficial de la marca.',
+        porque: 'Revisarlo por dentro requiere herramientas y experiencia.',
+        profesional: 'Service del aparato o servicio oficial', costo: '$ 800 a $ 2.000 el diagnóstico',
+        repararReemplazar: 'Si el aparato tiene muchos años o el arreglo cuesta más de la mitad de uno nuevo, suele convenir reemplazarlo. Si está en garantía, consultá primero con el comercio donde lo compraste.',
+        segundaOpinion: true
+      }
+    }
+  },
+
+  calefon: {
+    titulo: 'El calefón hace saltar la luz',
+    inicio: 'q1', preguntarAlquiler: true,
+    nodos: {
+      q1: { tipo: 'pregunta', texto: '¿La luz salta justo cuando prendés el calefón o mientras está calentando?', opciones: [
+        { t: 'Sí', ir: 'q2' },
+        { t: 'No, salta en otros momentos', irCaso: 'llave' },
+        { t: 'No sé', ir: 'q2' }
+      ]},
+      q2: { tipo: 'pregunta', texto: '¿Ves agua goteando del calefón o cerca del enchufe?', opciones: [
+        { t: 'Sí', ir: 'a_agua' },
+        { t: 'No', ir: 'r' },
+        { t: 'No sé, no llego a ver', ir: 'r' }
+      ]},
+      r: {
+        tipo: 'resultado', nivel: 'rojo', titulo: 'No lo uses hasta que lo revise un técnico',
+        ahora: [
+          'Desenchufá el calefón.',
+          'Si no hay olor a quemado ni agua cerca, podés subir la llave una sola vez con el calefón desenchufado, para tener luz en el resto de la casa.',
+          'Si la llave salta igual con el calefón desenchufado, dejala baja. El problema puede estar en la instalación.'
+        ],
+        sabemos: ['La falla aparece con el calefón, que es un aparato que junta agua y electricidad.'],
+        noSabemos: [
+          'Suele ser la resistencia, el termostato o humedad en las conexiones, pero para saber cuál hay que medir con un instrumento.',
+          'Si conviene repararlo o cambiarlo, hasta que alguien lo revise.'
+        ],
+        recomendacion: 'Pedí un técnico en calefones o un electricista.',
+        porque: 'Abrir un calefón implica tocar partes con agua y electricidad. No hay comprobaciones seguras que puedas hacer vos.',
+        profesional: 'Técnico en calefones o electricista', costo: '$ 1.500 a $ 3.000 la visita',
+        alquiler: 'Las fallas del calefón por desgaste en general le corresponden al propietario. Avisá a la inmobiliaria o al dueño antes de llamar a alguien y mandales la ficha, así no te piden fotos de nuevo.',
+        repararReemplazar: 'Si el tanque pierde agua o el calefón tiene más de 10 años, suele convenir cambiarlo. Si es la resistencia o el termostato, se cambian y el calefón sigue funcionando.',
+        segundaOpinion: true
+      }
+    }
+  },
+
+  lavarropas: {
+    titulo: 'El lavarropas queda con agua',
+    inicio: 'q1', preguntarAlquiler: false,
+    nodos: {
+      q1: { tipo: 'pregunta', texto: '¿Hay agua en el piso cerca del lavarropas?', opciones: [
+        { t: 'Sí, y está cerca de un enchufe', ir: 'a_agua' },
+        { t: 'Sí, pero lejos de enchufes', ir: 'q2' },
+        { t: 'No', ir: 'q2' },
+        { t: 'No sé, no llego a ver', ir: 'a_agua' }
+      ]},
+      q2: { tipo: 'pregunta', texto: 'Cuando debería sacar el agua, ¿qué hace?', opciones: [
+        { t: 'Hace ruido pero no sale el agua', ir: 'q3' },
+        { t: 'No hace nada', ir: 'q3' },
+        { t: 'No sé', ir: 'q3' }
+      ]},
+      q3: { tipo: 'pregunta', texto: '¿Sabés dónde está el filtro del lavarropas?', ayuda: 'En muchos modelos está abajo, adelante, detrás de una tapita.', opciones: [
+        { t: 'Sí', ir: 'r' },
+        { t: 'No, no sé dónde está', ir: 'r' }
+      ]},
+      r: {
+        tipo: 'resultado', nivel: 'amarillo', titulo: 'Hay comprobaciones que podés hacer vos',
+        ahora: ['No intentes abrir la puerta a la fuerza. Muchos lavarropas la traban mientras tienen agua.'],
+        sabemos: ['Cuando queda con agua, lo más común es que el filtro o la manguera de desagote estén tapados.'],
+        noSabemos: ['Si la bomba de desagote está rota. Eso solo lo puede ver un técnico.'],
+        recomendacion: 'Revisá el filtro y la manguera siguiendo los pasos.',
+        porque: 'Son comprobaciones que los manuales indican hacer al usuario, con el aparato desenchufado.',
+        pasos: [
+          { t: 'Desenchufá el lavarropas.', parar: 'el enchufe o el piso alrededor están mojados.', siParar: 'a_agua' },
+          { t: 'Buscá el filtro. Si no lo encontrás, buscá el manual de tu modelo con el nombre que figura en la etiqueta.', parar: 'para llegar al filtro hay que desatornillar el panel o mover el lavarropas.' },
+          { t: 'Si lavó con agua caliente, esperá a que se enfríe. Poné toallas y un recipiente bajo, porque va a salir agua. Abrí el filtro girándolo despacio (en algunos modelos hay que presionarlo antes) y sacá pelusas, monedas u otros objetos.', parar: 'el filtro no gira con la mano. No lo fuerces.' },
+          { t: 'Fijate que la manguera de desagote, atrás del lavarropas, no esté doblada ni aplastada.', parar: 'para verla tenés que mover el lavarropas con agua adentro.' },
+          { t: 'Cerrá bien el filtro, enchufá y probá un ciclo de centrifugado.', parar: 'sale agua por el filtro.' }
+        ],
+        finales: [{ t: 'Sacó el agua bien', ir: 'resuelto' }, { t: 'Sigue quedando con agua', ir: 'r_ayuda' }],
+        escalar: 'r_ayuda'
+      },
+      r_ayuda: {
+        tipo: 'resultado', nivel: 'amarillo', titulo: 'Hasta acá llega lo que se puede hacer sin riesgo',
+        sabemos: ['Lo que se puede revisar sin desarmar el lavarropas ya lo intentaste o no se puede hacer sin riesgo.'],
+        noSabemos: ['Si es la bomba de desagote, una obstrucción interna o una falla electrónica.'],
+        recomendacion: 'Pedí un técnico de lavarropas.',
+        porque: 'Lo que queda requiere desarmar el aparato.',
+        profesional: 'Técnico de lavarropas o servicio oficial de la marca', costo: '$ 1.200 a $ 2.500 la visita',
+        repararReemplazar: 'Si el lavarropas tiene más de 8 a 10 años y el arreglo cuesta más de la mitad de uno nuevo, suele convenir reemplazarlo. Si está en garantía, consultá primero con el comercio.',
+        segundaOpinion: true
+      }
+    }
+  },
+
+  humedad: {
+    titulo: 'Mancha de humedad en el techo',
+    inicio: 'q1', preguntarAlquiler: true,
+    nodos: {
+      q1: { tipo: 'pregunta', texto: '¿La mancha gotea o está mojada?', opciones: [
+        { t: 'Gotea', ir: 'q1b' },
+        { t: 'Está húmeda pero no gotea', ir: 'q2' },
+        { t: 'Está seca', ir: 'q2' },
+        { t: 'No sé, no llego a ver', ir: 'r_gotea' }
+      ]},
+      q1b: { tipo: 'pregunta', texto: '¿Gotea cerca de una lámpara, una llave de luz o un enchufe?', opciones: [
+        { t: 'Sí', ir: 'a_agua' },
+        { t: 'No', ir: 'r_gotea' },
+        { t: 'No sé', ir: 'a_agua' }
+      ]},
+      q2: { tipo: 'pregunta', texto: '¿El baño tiene ventana o un extractor que funcione?', opciones: [
+        { t: 'Tiene ventana', ir: 'q3' },
+        { t: 'Tiene extractor y anda', ir: 'q3' },
+        { t: 'No tiene, o no sé si el extractor anda', ir: 'q3' }
+      ]},
+      q3: { tipo: 'pregunta', texto: '¿Arriba del baño hay otro baño, una cocina o una azotea?', opciones: [
+        { t: 'Sí', ir: 'r' }, { t: 'No', ir: 'r' }, { t: 'No sé', ir: 'r' }
+      ]},
+      r: {
+        tipo: 'resultado', nivel: 'amarillo', titulo: 'Hay una prueba simple para saber de dónde viene',
+        ahora: ['Mientras tanto, ventilá el baño después de cada ducha.'],
+        sabemos: ['Las manchas en el techo del baño pueden venir del vapor de la ducha o de agua que filtra desde arriba.'],
+        noSabemos: ['Cuál de las dos es en tu caso. Para eso sirve la prueba.'],
+        recomendacion: 'Hacé la prueba del papel de aluminio.',
+        porque: 'Es una prueba casera orientativa, no un diagnóstico. Ayuda a separar la condensación de una filtración sin romper nada.',
+        pasos: [
+          { t: 'Secá la zona de la mancha con un trapo.', parar: 'para llegar tenés que subirte a algo inestable o la mancha está pegada a la lámpara.' },
+          { t: 'Pegá un cuadrado de papel de aluminio de unos 20 cm sobre la mancha, con cinta en todos los bordes para que quede cerrado.', parar: 'el techo está blando o se desprende.' },
+          { t: 'Dejalo dos días usando el baño como siempre. Después fijate de qué lado del aluminio hay humedad.', parar: 'mientras tanto empieza a gotear o la mancha crece rápido.' }
+        ],
+        finales: [
+          { t: 'Hay humedad del lado de afuera del aluminio', ir: 'r_condensacion' },
+          { t: 'Hay humedad del lado del techo, abajo del aluminio', ir: 'r_filtracion' },
+          { t: 'No me queda claro', ir: 'r_duda' }
+        ],
+        escalar: 'r_gotea'
+      },
+      r_condensacion: {
+        tipo: 'resultado', nivel: 'verde', titulo: 'Es condensación del baño',
+        sabemos: ['La humedad viene del vapor del baño y no de un caño.'],
+        ahora: [
+          'Dejá la puerta abierta y el extractor prendido un rato después de bañarte.',
+          'Para limpiar el moho, usá lavandina diluida en agua, con guantes y el baño ventilado. No la mezcles con otros productos.'
+        ],
+        recomendacion: 'Mejorá la ventilación y limpiá la mancha.',
+        porque: 'Si el vapor tiene por dónde salir, la mancha no vuelve.',
+        alquiler: 'Si el baño no tiene ventana y el extractor no anda, avisá a la inmobiliaria o al dueño. El extractor es parte de la vivienda.'
+      },
+      r_filtracion: {
+        tipo: 'resultado', nivel: 'amarillo', titulo: 'Pedí ayuda, sin dejarlo pasar',
+        sabemos: ['La humedad viene de adentro del techo. Puede ser un caño o una filtración desde arriba.'],
+        noSabemos: ['De dónde viene exactamente. Lo tiene que ver un sanitario.'],
+        recomendacion: 'Pedí un sanitario.',
+        porque: 'Cuanto más tiempo pasa, más grande se hace el daño.',
+        profesional: 'Sanitario', costo: '$ 1.500 a $ 3.500 la visita',
+        alquiler: 'Las filtraciones y los caños en general le corresponden al propietario. Avisá con la ficha y sacale fotos a la mancha con fecha, así queda registro de cuándo apareció.',
+        segundaOpinion: true
+      },
+      r_gotea: {
+        tipo: 'resultado', nivel: 'amarillo', titulo: 'Avisá hoy',
+        ahora: ['Poné un recipiente abajo.', 'Si arriba hay otro apartamento, avisale al vecino. Puede ser un caño suyo.'],
+        sabemos: ['Si gotea, hay agua pasando por el techo.'],
+        noSabemos: ['De dónde viene. Lo tiene que ver un sanitario.'],
+        recomendacion: 'Pedí un sanitario lo antes posible.',
+        porque: 'El agua que filtra daña el techo y puede llegar a la instalación eléctrica.',
+        profesional: 'Sanitario', costo: '$ 1.500 a $ 3.500 la visita',
+        alquiler: 'Las filtraciones y los caños en general le corresponden al propietario. Avisá hoy con la ficha y fotos con fecha.',
+        segundaOpinion: true
+      },
+      r_duda: {
+        tipo: 'resultado', nivel: 'amarillo', titulo: 'Que lo mire alguien que sabe',
+        sabemos: ['Hiciste la prueba, pero el resultado no es claro.'],
+        noSabemos: ['Si es condensación, filtración o las dos cosas.'],
+        recomendacion: 'Mandá una foto del aluminio y de la mancha a un técnico.',
+        porque: 'Con la foto alcanza para que alguien con experiencia lo interprete.',
+        alquiler: 'Si alquilás, podés mandar la ficha a la inmobiliaria con las fotos para que quede registro.',
+        segundaOpinion: true
+      }
+    }
+  },
+
+  estufa: {
+    titulo: 'Estufa a gas que prende a veces',
+    inicio: 'q1', preguntarAlquiler: true,
+    nodos: {
+      q1: { tipo: 'pregunta', texto: '¿Sentís olor a gas cerca de la estufa?', opciones: [
+        { t: 'Sí', ir: 'a_gas' },
+        { t: 'No', ir: 'q2' },
+        { t: 'No estoy seguro o segura', ir: 'a_gas', nota: 'Si no estás seguro, es mejor actuar como si hubiera olor a gas.' }
+      ]},
+      q2: { tipo: 'pregunta', texto: 'Cuando prende, ¿cómo es la llama?', opciones: [
+        { t: 'Azul', ir: 'r' },
+        { t: 'Amarilla o anaranjada, o hay manchas negras de hollín', ir: 'r_co' },
+        { t: 'No sé', ir: 'r' }
+      ]},
+      r: {
+        tipo: 'resultado', nivel: 'rojo', titulo: 'No la uses hasta que la revise un instalador de gas habilitado',
+        ahora: ['Cerrá la llave de gas de la estufa.', 'Mientras tanto, usá otra forma de calefacción segura.'],
+        sabemos: ['Que prenda a veces y a veces no puede ser un problema del encendido, del piloto o de la llegada del gas.'],
+        noSabemos: ['Cuál de esos es. Revisarlo implica manipular partes con gas.'],
+        recomendacion: 'Llamá a un instalador de gas habilitado.',
+        porque: 'URSEA recomienda que el mantenimiento de artefactos a gas lo hagan técnicos o empresas habilitadas, porque una instalación mal hecha puede causar intoxicaciones por monóxido de carbono.',
+        profesional: 'Instalador de gas habilitado. Preguntale por su habilitación.', costo: '$ 2.000 a $ 4.000 la visita',
+        alquiler: 'Los artefactos a gas que vienen con la vivienda en general le corresponden al propietario. Avisá antes y mandá la ficha.',
+        segundaOpinion: true
+      },
+      r_co: {
+        tipo: 'resultado', nivel: 'rojo', titulo: 'No la uses, puede estar quemando mal', urgente: true,
+        ahora: [
+          'Apagala y cerrá la llave de gas.',
+          'Ventilá el ambiente.',
+          'Si alguien siente dolor de cabeza, mareos o náuseas, salgan al aire libre y llamen al 911.'
+        ],
+        sabemos: ['Una llama amarilla o el hollín indican que el gas no se está quemando bien, y eso puede generar monóxido de carbono, que no tiene olor.'],
+        recomendacion: 'Llamá a un instalador de gas habilitado.',
+        porque: 'Es un riesgo para la salud aunque la estufa parezca funcionar.',
+        profesional: 'Instalador de gas habilitado', costo: '$ 2.000 a $ 4.000 la visita',
+        alquiler: 'Los artefactos a gas que vienen con la vivienda en general le corresponden al propietario. Avisá hoy.'
+      }
+    }
+  }
+};
+
+const RESUELTO = {
+  tipo: 'resultado', nivel: 'verde', titulo: 'Se solucionó',
+  sabemos: ['Lo resolviste con comprobaciones seguras.'],
+  recomendacion: 'Guardá la ficha por si vuelve a pasar.',
+  porque: 'Si se repite, ya sabés qué funcionó y qué no.'
+};
+
+const app = document.getElementById('app');
+let ctx, historial = [];
+
+function guardarRegistro(lista) {
+  try { localStorage.setItem('semaforo_registro', JSON.stringify(lista)); } catch (e) {}
+}
+function leerRegistro() {
+  try { return JSON.parse(localStorage.getItem('semaforo_registro') || '[]'); } catch (e) { return []; }
+}
+function registrar(evento, detalle) {
+  const lista = leerRegistro();
+  lista.push({ hora: new Date().toLocaleString('es-UY'), evento, detalle: detalle || '' });
+  guardarRegistro(lista);
+}
+
+function nuevoContexto() {
+  return { caso: null, alarmas: [], respuestas: [], pasos: [], alquila: null, nivel: null, resultado: null, otro: '' };
+}
+
+function ir(pantalla, args) {
+  historial.push({ pantalla, args, ctx: JSON.stringify(ctx) });
+  render(pantalla, args);
+}
+function volver() {
+  if (historial.length < 2) return;
+  historial.pop();
+  const anterior = historial[historial.length - 1];
+  ctx = JSON.parse(anterior.ctx);
+  registrar('volver atrás', anterior.pantalla);
+  render(anterior.pantalla, anterior.args);
+}
+
+function el(html) { app.innerHTML = html; window.scrollTo(0, 0); }
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function encabezado(conVolver) {
+  return `<header><span class="marca">Semáforo del hogar</span><span class="aviso">Prototipo</span></header>` +
+    (conVolver && historial.length > 1 ? `<button class="volver" data-accion="volver">Volver</button>` : '');
+}
+function lista(items) { return `<ul>${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`; }
+
+function nodo(id) {
+  if (id === 'resuelto') return RESUELTO;
+  if (COMUNES[id]) return COMUNES[id];
+  return CASOS[ctx.caso].nodos[id];
+}
+
+const PANTALLAS = {
+  inicio() {
+    el(`${encabezado(false)}
+      <h1>¿Algo falla en tu casa?</h1>
+      <p>Te ayudamos a saber si es peligroso, qué podés hacer vos y cuándo conviene pedir ayuda.</p>
+      <button class="principal" data-ir="alarmas">Empezar</button>`);
+  },
+
+  alarmas() {
+    el(`${encabezado(true)}
+      <h1>Antes que nada</h1>
+      <p>¿Pasa alguna de estas cosas ahora?</p>
+      ${ALARMAS.map(a => `<label class="tarjeta check"><input type="checkbox" value="${a.id}"><span>${esc(a.label)}</span></label>`).join('')}
+      <button class="principal" data-accion="confirmarAlarmas">Seguir</button>
+      <p class="ayuda">Si no pasa ninguna, seguí sin marcar nada.</p>`);
+  },
+
+  categoria() {
+    el(`${encabezado(true)}
+      <h1>¿Con qué es el problema?</h1>
+      ${Object.entries(CASOS).map(([id, c]) => `<button data-caso="${id}">${esc(c.titulo)}</button>`).join('')}
+      <button data-ir="otro">Otro problema</button>`);
+  },
+
+  pregunta(args) {
+    const n = nodo(args.id);
+    el(`${encabezado(true)}
+      <p class="ayuda">${esc(CASOS[ctx.caso].titulo)}</p>
+      <h1>${esc(n.texto)}</h1>
+      ${n.ayuda ? `<p class="ayuda">${esc(n.ayuda)}</p>` : ''}
+      ${n.opciones.map((o, i) => `<button data-opcion="${i}">${esc(o.t)}</button>`).join('')}`);
+    app.querySelectorAll('[data-opcion]').forEach(b => b.onclick = () => {
+      const o = n.opciones[+b.dataset.opcion];
+      ctx.respuestas.push({ p: n.texto, r: o.t });
+      registrar('respuesta', `${n.texto} ${o.t}`);
+      if (o.irCaso) { empezarCaso(o.irCaso, n.opciones[+b.dataset.opcion].t); return; }
+      avanzar(o.ir, o.nota);
+    });
+  },
+
+  alquiler(args) {
+    el(`${encabezado(true)}
+      <p class="ayuda">${esc(CASOS[ctx.caso].titulo)}</p>
+      <h1>¿Alquilás la casa o el apartamento?</h1>
+      <p class="ayuda">Cambia a quién le toca resolver algunas cosas.</p>
+      <button data-alq="si">Sí, alquilo</button>
+      <button data-alq="no">No, es propia o de mi familia</button>`);
+    app.querySelectorAll('[data-alq]').forEach(b => b.onclick = () => {
+      ctx.alquila = b.dataset.alq === 'si';
+      ctx.respuestas.push({ p: '¿Alquila?', r: ctx.alquila ? 'Sí' : 'No' });
+      registrar('alquiler', ctx.alquila ? 'alquila' : 'propia');
+      ir('resultado', { id: args.id, nota: args.nota });
+    });
+  },
+
+  resultado(args) {
+    const r = nodo(args.id);
+    ctx.nivel = r.nivel; ctx.resultado = r.titulo;
+    registrar('resultado', `${r.nivel} ${r.titulo}`);
+    const etiqueta = { rojo: 'No lo toques', amarillo: 'Con cuidado', verde: 'Lo podés hacer vos' }[r.nivel];
+    const luces = ['rojo', 'amarillo', 'verde'].map(c => `<span class="${c === r.nivel ? 'on' : ''}"></span>`).join('');
+    let html = `${encabezado(true)}
+      ${args.nota ? `<p class="ayuda">${esc(args.nota)}</p>` : ''}
+      <div class="semaforo ${r.nivel}"><div class="luces">${luces}</div>
+        <div class="nivel">${etiqueta}${r.urgente ? ' · urgente' : ''}</div>
+        <div class="titulo">${esc(r.titulo)}</div></div>`;
+    if (r.ahora) html += `<h2>Ahora mismo</h2><div class="tarjeta">${lista(r.ahora)}</div>`;
+    html += `<h2>Te recomendamos</h2><div class="tarjeta"><b>${esc(r.recomendacion)}</b><p class="ayuda">${esc(r.porque)}</p></div>`;
+    if (r.sabemos || r.noSabemos) {
+      html += `<h2>Lo que sabemos y lo que no</h2><div class="tarjeta">`;
+      if (r.sabemos) html += `<p><b>Sabemos</b></p>${lista(r.sabemos)}`;
+      if (r.noSabemos) html += `<p><b>No podemos saber sin ver el aparato</b></p>${lista(r.noSabemos)}`;
+      html += `</div>`;
+    }
+    if (r.alternativas) html += `<h2>También podés</h2><div class="tarjeta">${lista(r.alternativas)}</div>`;
+    if (r.profesional) {
+      html += `<h2>A quién llamar</h2><div class="tarjeta"><p>${esc(r.profesional)}</p>`;
+      if (r.costo) html += `<p>Referencia de costo: ${esc(r.costo)}</p><p class="notas">${COSTO_EJEMPLO}</p>`;
+      html += `</div>`;
+    }
+    if (r.repararReemplazar) html += `<h2>¿Reparar o reemplazar?</h2><div class="tarjeta"><p>${esc(r.repararReemplazar)}</p><p class="notas">Criterio orientativo.</p></div>`;
+    if (r.alquiler && ctx.alquila) html += `<h2>Si alquilás</h2><div class="tarjeta"><p>${esc(r.alquiler)}</p><p class="notas">Es una orientación general, no asesoramiento legal. Revisá tu contrato y avisá antes de arreglar o pagar algo.</p></div>`;
+
+    if (r.pasos) html += `<button class="principal" data-accion="pasos">Empezar los pasos</button>`;
+    html += `<button data-accion="ficha">Armar la ficha del problema para mandarla</button>`;
+    if (r.segundaOpinion) html += `<button data-accion="segunda">Pedir una segunda opinión a un técnico</button>`;
+    html += `<button data-accion="cierre">Terminar</button>`;
+    el(html);
+    app.querySelector('[data-accion="pasos"]')?.addEventListener('click', () => ir('paso', { id: args.id, i: 0 }));
+    app.querySelector('[data-accion="segunda"]')?.addEventListener('click', () => ir('segunda', { id: args.id }));
+  },
+
+  paso(args) {
+    const r = nodo(args.id);
+    const p = r.pasos[args.i];
+    const ultimo = args.i === r.pasos.length - 1;
+    let html = `${encabezado(true)}
+      <p class="ayuda">Paso ${args.i + 1} de ${r.pasos.length}</p>
+      <h1>${esc(p.t)}</h1>
+      <div class="parar"><b>Pará si</b> ${esc(p.parar)}</div>`;
+    if (!ultimo) {
+      html += `<button class="principal" data-accion="sigo">Listo, sigo</button>`;
+    } else {
+      html += r.finales.map((f, k) => `<button ${k === 0 ? 'class="principal"' : ''} data-final="${k}">${esc(f.t)}</button>`).join('');
+    }
+    html += `<button data-accion="parada">Me pasó lo de pará si</button>`;
+    el(html);
+    app.querySelector('[data-accion="sigo"]')?.addEventListener('click', () => {
+      ctx.pasos.push(`${p.t} Hecho.`);
+      registrar('paso hecho', `${args.i + 1}`);
+      ir('paso', { id: args.id, i: args.i + 1 });
+    });
+    app.querySelectorAll('[data-final]').forEach(b => b.onclick = () => {
+      const f = r.finales[+b.dataset.final];
+      ctx.pasos.push(`${p.t} Resultado: ${f.t}.`);
+      registrar('final de pasos', f.t);
+      ir('resultado', { id: f.ir });
+    });
+    app.querySelector('[data-accion="parada"]').onclick = () => {
+      ctx.pasos.push(`${p.t} Me detuve porque ${p.parar}`);
+      registrar('señal de parada', `paso ${args.i + 1}`);
+      ir('resultado', { id: p.siParar || r.escalar, nota: 'Hiciste bien en parar. Esto es lo que conviene ahora.' });
+    };
+  },
+
+  ficha() {
+    const texto = armarFicha();
+    registrar('ficha', 'abrió la ficha');
+    el(`${encabezado(true)}
+      <h1>Ficha del problema</h1>
+      <p class="ayuda">Mandásela al técnico, a un familiar o a la inmobiliaria. Así no tenés que explicar todo de nuevo.</p>
+      <pre class="ficha">${esc(texto)}</pre>
+      <button class="principal" data-accion="copiar">Copiar</button>
+      <a class="boton" target="_blank" rel="noopener" data-accion="whatsapp" href="https://wa.me/?text=${encodeURIComponent(texto)}">Mandar por WhatsApp</a>
+      <button data-accion="cierre">Terminar</button>`);
+    app.querySelector('[data-accion="copiar"]').onclick = (e) => {
+      registrar('ficha', 'copió');
+      const b = e.currentTarget;
+      const ok = () => { b.textContent = 'Copiada'; };
+      if (navigator.clipboard) navigator.clipboard.writeText(texto).then(ok, ok); else ok();
+    };
+    app.querySelector('[data-accion="whatsapp"]').onclick = () => registrar('ficha', 'mandó por WhatsApp');
+  },
+
+  segunda() {
+    registrar('segunda opinión', 'vio la oferta');
+    el(`${encabezado(true)}
+      <h1>Segunda opinión</h1>
+      <div class="tarjeta">
+        <p>Un técnico lee tu ficha con lo que respondiste y lo que probaste, y te contesta por WhatsApp qué haría en tu lugar.</p>
+        <p>Respuesta en menos de 1 hora.</p>
+        <p>Costo: $ 350</p>
+        <p class="notas">${COSTO_EJEMPLO}</p>
+      </div>
+      <button class="principal" data-accion="pedirSegunda">Pedir segunda opinión</button>
+      <button data-accion="volver">Ahora no</button>`);
+    app.querySelector('[data-accion="pedirSegunda"]').onclick = () => {
+      registrar('segunda opinión', 'la pidió');
+      el(`${encabezado(false)}
+        <h1>Pedido enviado</h1>
+        <p>Te va a escribir un técnico por WhatsApp.</p>
+        <p class="notas">Esto es una simulación del prototipo, no se envió nada.</p>
+        <button class="principal" data-accion="cierre">Terminar</button>`);
+    };
+  },
+
+  otro() {
+    el(`${encabezado(true)}
+      <h1>Contanos qué pasa</h1>
+      <p class="ayuda">Con tus palabras, como se lo contarías a alguien por WhatsApp.</p>
+      <textarea id="otroTexto"></textarea>
+      <p class="notas">En este prototipo este caso todavía no está cargado. Armamos la ficha para que se la puedas mandar a alguien.</p>
+      <button class="principal" data-accion="otroFicha">Seguir</button>`);
+    app.querySelector('[data-accion="otroFicha"]').onclick = () => {
+      ctx.otro = document.getElementById('otroTexto').value.trim();
+      ctx.caso = null;
+      registrar('otro problema', ctx.otro);
+      ir('ficha');
+    };
+  },
+
+  cierre() {
+    registrar('cierre', 'pantalla de cierre');
+    const escala = (pregunta, ayuda, evento, siguiente) => {
+      el(`${encabezado(false)}
+        <h1>Antes de terminar</h1>
+        <p>${pregunta}</p>
+        <div class="puntaje">${[1, 2, 3, 4, 5].map(n => `<button data-p="${n}">${n}</button>`).join('')}</div>
+        <p class="ayuda">${ayuda}</p>`);
+      app.querySelectorAll('[data-p]').forEach(b => b.onclick = () => {
+        registrar(evento, b.dataset.p);
+        siguiente();
+      });
+    };
+    const gracias = () => el(`${encabezado(false)}<h1>Gracias</h1><button class="principal" data-accion="reiniciar">Volver al inicio</button>`);
+    escala('Del 1 al 5, ¿qué tan tranquilo o tranquila te quedaste con esta situación?', '1 es nada tranquilo, 5 es totalmente tranquilo.', 'puntaje tranquilidad',
+      () => escala('Del 1 al 5, ¿qué tan claro tenés lo que tenés que hacer ahora?', '1 es nada claro, 5 es totalmente claro.', 'puntaje claridad', gracias));
+  },
+
+  registro() {
+    const filas = leerRegistro();
+    el(`<h1>Registro de la sesión</h1>
+      <p class="notas">Solo para el equipo. Se guarda en este navegador.</p>
+      <button class="chico" data-accion="borrarRegistro">Borrar registro</button>
+      <button class="chico" data-accion="reiniciar">Ir al prototipo</button>
+      <table>${filas.map(f => `<tr><td>${esc(f.hora)}</td><td>${esc(f.evento)}</td><td>${esc(f.detalle)}</td></tr>`).join('')}</table>`);
+  }
+};
+
+function armarFicha() {
+  const hoy = new Date().toLocaleDateString('es-UY');
+  const nivel = { rojo: 'Rojo, no tocar', amarillo: 'Amarillo, con cuidado', verde: 'Verde, lo puedo hacer yo' }[ctx.nivel] || 'Sin evaluar';
+  const l = [];
+  l.push('FICHA DEL PROBLEMA');
+  l.push(`Fecha: ${hoy}`);
+  l.push(`Problema: ${ctx.caso ? CASOS[ctx.caso].titulo : ctx.alarmas.length ? 'Señal de alarma' : 'Otro'}`);
+  if (ctx.otro) l.push(`Lo que pasa: ${ctx.otro}`);
+  l.push(`Señales de alarma: ${ctx.alarmas.length ? ctx.alarmas.map(id => ALARMAS.find(a => a.id === id).label).join(', ') : 'ninguna'}`);
+  if (ctx.respuestas.length) {
+    l.push('');
+    l.push('Lo que respondí:');
+    ctx.respuestas.forEach(x => l.push(`- ${x.p} ${x.r}`));
+  }
+  if (ctx.pasos.length) {
+    l.push('');
+    l.push('Lo que ya probé:');
+    ctx.pasos.forEach(x => l.push(`- ${x}`));
+  }
+  l.push('');
+  l.push(`Nivel: ${nivel}${ctx.resultado ? '. ' + ctx.resultado : ''}`);
+  l.push(`Vivienda: ${ctx.alquila === null ? 'no indicado' : ctx.alquila ? 'alquilada' : 'propia'}`);
+  l.push('Fotos: se adjuntan en la versión real');
+  return l.join('\n');
+}
+
+function empezarCaso(id, desde) {
+  ctx.caso = id;
+  registrar('caso', CASOS[id].titulo + (desde ? ` (desde: ${desde})` : ''));
+  avanzar(CASOS[id].inicio);
+}
+
+function avanzar(id, nota) {
+  const n = nodo(id);
+  if (n.tipo === 'pregunta') { ir('pregunta', { id }); return; }
+  if (CASOS[ctx.caso]?.preguntarAlquiler && ctx.alquila === null && !n.urgente) { ir('alquiler', { id, nota }); return; }
+  ir('resultado', { id, nota });
+}
+
+function render(pantalla, args) { PANTALLAS[pantalla](args || {}); }
+
+app.addEventListener('click', e => {
+  const t = e.target.closest('button, a');
+  if (!t) return;
+  if (t.dataset.ir) { if (t.dataset.ir === 'alarmas') registrar('inicio', ''); ir(t.dataset.ir); return; }
+  if (t.dataset.caso) { empezarCaso(t.dataset.caso); return; }
+  switch (t.dataset.accion) {
+    case 'volver': volver(); break;
+    case 'confirmarAlarmas': {
+      ctx.alarmas = [...app.querySelectorAll('input:checked')].map(i => i.value);
+      registrar('alarmas', ctx.alarmas.join(', ') || 'ninguna');
+      if (ctx.alarmas.length) {
+        ctx.caso = null;
+        ir('resultado', { id: ALARMAS.find(a => a.id === ctx.alarmas[0]).ir, nota: ctx.alarmas.length > 1 ? 'Marcaste más de una señal. Empezamos por la más urgente.' : '' });
+      } else ir('categoria');
+      break;
+    }
+    case 'ficha': ir('ficha'); break;
+    case 'cierre': ir('cierre'); break;
+    case 'reiniciar': iniciar(); break;
+    case 'borrarRegistro': guardarRegistro([]); render('registro'); break;
+  }
+});
+
+function iniciar() {
+  ctx = nuevoContexto();
+  historial = [];
+  if (location.hash === '#registro') { history.replaceState(null, '', location.pathname); }
+  ir('inicio');
+}
+
+window.addEventListener('hashchange', () => { if (location.hash === '#registro') render('registro'); });
+if (location.hash === '#registro') { ctx = nuevoContexto(); render('registro'); } else iniciar();
+</script>
+</body>
+</html>
