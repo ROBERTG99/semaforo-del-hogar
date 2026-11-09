@@ -43,19 +43,19 @@
   h1 { font-size: 22px; margin: 8px 0 12px; }
   h2 { font-size: 17px; margin: 18px 0 6px; }
   p { margin: 8px 0; }
-  .ayuda { color: var(--suave); font-size: 15px; }
+  .ayuda { color: var(--suave); font-size: 16px; }
   .tarjeta { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 8px; padding: 12px 14px; margin: 10px 0; }
   ul { margin: 6px 0; padding-left: 20px; }
   li { margin: 4px 0; }
   button, .boton {
-    display: block; width: 100%; margin: 8px 0; padding: 13px 14px;
+    display: block; width: 100%; min-height: 48px; margin: 8px 0; padding: 13px 14px;
     font: inherit; text-align: left; cursor: pointer;
     background: var(--tarjeta); color: var(--texto);
     border: 1px solid var(--borde); border-radius: 8px; text-decoration: none;
   }
   button.principal, .boton.principal { background: var(--boton); color: var(--boton-texto); border-color: var(--boton); text-align: center; font-weight: 600; }
-  button.chico { display: inline-block; width: auto; padding: 6px 10px; font-size: 14px; margin: 0; }
-  .volver { border: none; background: none; padding: 4px 0; width: auto; color: var(--suave); font-size: 15px; margin: 0 0 4px; }
+  button.chico { display: inline-block; width: auto; min-height: 0; padding: 6px 10px; font-size: 14px; margin: 0; }
+  .volver { border: none; background: none; min-height: 0; padding: 4px 0; width: auto; color: var(--suave); font-size: 15px; margin: 0 0 4px; }
   .semaforo { border-radius: 8px; padding: 14px; color: #fff; margin: 8px 0 12px; }
   .semaforo.amarillo { color: #1f1f1f; }
   .semaforo.rojo { background: var(--rojo); }
@@ -68,11 +68,13 @@
   .luces span.on { background: #fff; }
   .parar { border-left: 4px solid var(--rojo); padding: 8px 10px; margin: 10px 0; background: var(--tarjeta); }
   .parar b { color: var(--rojo); }
+  .instruccion { font-size: 22px; font-weight: 700; line-height: 1.3; background: var(--tarjeta); border: 2px solid var(--rojo); border-radius: 8px; padding: 14px; margin: 8px 0; }
+  h1:focus { outline: none; }
   .check { display: flex; gap: 10px; align-items: flex-start; }
   .check input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
   pre.ficha { white-space: pre-wrap; font: 14px/1.4 ui-monospace, Menlo, Consolas, monospace; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 8px; padding: 12px; }
   textarea { width: 100%; min-height: 120px; font: inherit; padding: 10px; border: 1px solid var(--borde); border-radius: 8px; background: var(--tarjeta); color: var(--texto); }
-  .notas { font-size: 13px; color: var(--suave); }
+  .notas { font-size: 14px; color: var(--suave); }
   .puntaje { display: flex; gap: 6px; }
   .puntaje button { text-align: center; }
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
@@ -453,7 +455,7 @@ function leerRegistro() {
 }
 function registrar(evento, detalle) {
   const lista = leerRegistro();
-  lista.push({ hora: new Date().toLocaleString('es-UY'), evento, detalle: detalle || '' });
+  lista.push({ hora: new Date().toLocaleString('es-UY'), ms: Date.now(), evento, detalle: detalle || '' });
   guardarRegistro(lista);
 }
 
@@ -474,7 +476,29 @@ function volver() {
   render(anterior.pantalla, anterior.args);
 }
 
-function el(html) { app.innerHTML = html; window.scrollTo(0, 0); }
+function el(html) {
+  app.innerHTML = html;
+  window.scrollTo(0, 0);
+  const titulo = app.querySelector('h1');
+  if (titulo) { titulo.tabIndex = -1; titulo.focus({ preventScroll: true }); }
+}
+function copiarTexto(texto) {
+  const alternativa = () => {
+    const t = document.createElement('textarea');
+    t.value = texto;
+    t.setAttribute('readonly', '');
+    t.style.position = 'fixed';
+    t.style.opacity = '0';
+    document.body.appendChild(t);
+    t.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) {}
+    t.remove();
+    return ok;
+  };
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(texto).then(() => true, alternativa);
+  return Promise.resolve(alternativa());
+}
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function encabezado(conVolver) {
   return `<header><span class="marca">Semáforo del hogar</span><span class="aviso">Prototipo</span></header>` +
@@ -554,8 +578,16 @@ const PANTALLAS = {
       <div class="semaforo ${r.nivel}"><div class="luces">${luces}</div>
         <div class="nivel">${etiqueta}${r.urgente ? ' · urgente' : ''}</div>
         <div class="titulo">${esc(r.titulo)}</div></div>`;
-    if (r.ahora) html += `<h2>Ahora mismo</h2><div class="tarjeta">${lista(r.ahora)}</div>`;
+    if (r.ahora && r.urgente) {
+      html += `<h2>Ahora mismo</h2><div class="instruccion">${esc(r.ahora[0])}</div>`;
+      if (r.ahora.length > 1) html += `<div class="tarjeta">${lista(r.ahora.slice(1))}</div>`;
+    } else if (r.ahora) {
+      html += `<h2>Ahora mismo</h2><div class="tarjeta">${lista(r.ahora)}</div>`;
+    }
+    const otras = r.urgente && ctx.alarmas.length > 1 ? ALARMAS.filter(a => ctx.alarmas.includes(a.id) && a.ir !== args.id) : [];
+    if (otras.length) html += `<h2>También marcaste</h2>${otras.map(a => `<button data-alarma="${a.ir}">${esc(a.label)}</button>`).join('')}`;
     html += `<h2>Te recomendamos</h2><div class="tarjeta"><b>${esc(r.recomendacion)}</b><p class="ayuda">${esc(r.porque)}</p></div>`;
+    if (r.pasos) html += `<button class="principal" data-accion="pasos">Empezar los pasos</button>`;
     if (r.sabemos || r.noSabemos) {
       html += `<h2>Lo que sabemos y lo que no</h2><div class="tarjeta">`;
       if (r.sabemos) html += `<p><b>Sabemos</b></p>${lista(r.sabemos)}`;
@@ -571,13 +603,13 @@ const PANTALLAS = {
     if (r.repararReemplazar) html += `<h2>¿Reparar o reemplazar?</h2><div class="tarjeta"><p>${esc(r.repararReemplazar)}</p><p class="notas">Criterio orientativo.</p></div>`;
     if (r.alquiler && ctx.alquila) html += `<h2>Si alquilás</h2><div class="tarjeta"><p>${esc(r.alquiler)}</p><p class="notas">Es una orientación general, no asesoramiento legal. Revisá tu contrato y avisá antes de arreglar o pagar algo.</p></div>`;
 
-    if (r.pasos) html += `<button class="principal" data-accion="pasos">Empezar los pasos</button>`;
     html += `<button data-accion="ficha">Armar la ficha del problema para mandarla</button>`;
     if (r.segundaOpinion) html += `<button data-accion="segunda">Pedir una segunda opinión a un técnico</button>`;
     html += `<button data-accion="cierre">Terminar</button>`;
     el(html);
     app.querySelector('[data-accion="pasos"]')?.addEventListener('click', () => ir('paso', { id: args.id, i: 0 }));
     app.querySelector('[data-accion="segunda"]')?.addEventListener('click', () => ir('segunda', { id: args.id }));
+    app.querySelectorAll('[data-alarma]').forEach(b => b.onclick = () => ir('resultado', { id: b.dataset.alarma }));
   },
 
   paso(args) {
@@ -593,7 +625,7 @@ const PANTALLAS = {
     } else {
       html += r.finales.map((f, k) => `<button ${k === 0 ? 'class="principal"' : ''} data-final="${k}">${esc(f.t)}</button>`).join('');
     }
-    html += `<button data-accion="parada">Me pasó lo de pará si</button>`;
+    html += `<button data-accion="parada">Pasó eso, me detengo</button>`;
     el(html);
     app.querySelector('[data-accion="sigo"]')?.addEventListener('click', () => {
       ctx.pasos.push(`${p.t} Hecho.`);
@@ -624,10 +656,11 @@ const PANTALLAS = {
       <a class="boton" target="_blank" rel="noopener" data-accion="whatsapp" href="https://wa.me/?text=${encodeURIComponent(texto)}">Mandar por WhatsApp</a>
       <button data-accion="cierre">Terminar</button>`);
     app.querySelector('[data-accion="copiar"]').onclick = (e) => {
-      registrar('ficha', 'copió');
       const b = e.currentTarget;
-      const ok = () => { b.textContent = 'Copiada'; };
-      if (navigator.clipboard) navigator.clipboard.writeText(texto).then(ok, ok); else ok();
+      copiarTexto(texto).then(copiado => {
+        registrar('ficha', copiado ? 'copió' : 'no se pudo copiar');
+        b.textContent = copiado ? 'Copiada' : 'No se pudo copiar. Mantené apretado el texto para copiarlo';
+      });
     };
     app.querySelector('[data-accion="whatsapp"]').onclick = () => registrar('ficha', 'mandó por WhatsApp');
   },
@@ -689,11 +722,18 @@ const PANTALLAS = {
 
   registro() {
     const filas = leerRegistro();
+    const espera = (f, i) => (i && f.ms && filas[i - 1].ms ? Math.round((f.ms - filas[i - 1].ms) / 1000) + ' s' : '');
     el(`<h1>Registro de la sesión</h1>
-      <p class="notas">Solo para el equipo. Se guarda en este navegador.</p>
+      <p class="notas">Solo para el equipo. Se guarda en este navegador. La segunda columna es el tiempo desde el evento anterior.</p>
+      <button class="chico" data-accion="copiarRegistro">Copiar registro</button>
       <button class="chico" data-accion="borrarRegistro">Borrar registro</button>
       <button class="chico" data-accion="reiniciar">Ir al prototipo</button>
-      <table>${filas.map(f => `<tr><td>${esc(f.hora)}</td><td>${esc(f.evento)}</td><td>${esc(f.detalle)}</td></tr>`).join('')}</table>`);
+      <table>${filas.map((f, i) => `<tr><td>${esc(f.hora)}</td><td>${espera(f, i)}</td><td>${esc(f.evento)}</td><td>${esc(f.detalle)}</td></tr>`).join('')}</table>`);
+    app.querySelector('[data-accion="copiarRegistro"]').onclick = (e) => {
+      const b = e.currentTarget;
+      const texto = filas.map((f, i) => [f.hora, espera(f, i), f.evento, f.detalle].join('\t')).join('\n');
+      copiarTexto(texto).then(copiado => { b.textContent = copiado ? 'Copiado' : 'No se pudo copiar'; });
+    };
   }
 };
 
