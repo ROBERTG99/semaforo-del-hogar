@@ -198,15 +198,14 @@ const CASOS = {
       },
       r_aparato: {
         tipo: 'resultado', nivel: 'amarillo', titulo: 'Probablemente el problema esté en ese aparato',
-        ahora: ['Desenchufá ese aparato y volvé a subir la llave.'],
+        ahora: ['Desenchufá ese aparato y volvé a subir la llave.', 'No lo vuelvas a enchufar hasta que lo revise un técnico.'],
         sabemos: ['Si la llave solo salta con ese aparato, lo más probable es que la falla esté en el aparato y no en la instalación.'],
         noSabemos: ['Qué tiene el aparato por dentro. Eso no conviene revisarlo sin experiencia.'],
         recomendacion: 'Dejá de usar ese aparato y comprobá que sin él no salta.',
         porque: 'Así sabés si alcanza con arreglar o cambiar el aparato.',
         pasos: [
           { t: 'Desenchufá el aparato y subí la llave.', parar: 'la llave no sube o vuelve a saltar enseguida.' },
-          { t: 'Usá la casa normalmente uno o dos días sin ese aparato.', parar: 'la llave salta igual sin el aparato enchufado.' },
-          { t: 'Si querés confirmarlo, enchufalo en otro enchufe de otra parte de la casa y prendelo una vez.', parar: 'el aparato tiene olor a quemado, hace chispas o el enchufe está caliente. En ese caso no lo pruebes.', siParar: 'r_aparato_fin' }
+          { t: 'Usá la casa normalmente uno o dos días sin ese aparato.', parar: 'la llave salta igual sin el aparato enchufado.' }
         ],
         finales: [{ t: 'Sin el aparato no saltó más', ir: 'r_aparato_fin' }, { t: 'Saltó igual sin el aparato', ir: 'r_instalacion' }],
         escalar: 'r_instalacion'
@@ -352,8 +351,9 @@ const CASOS = {
         escalar: 'r_gotea'
       },
       r_condensacion: {
-        tipo: 'resultado', nivel: 'verde', titulo: 'Es condensación del baño',
-        sabemos: ['La humedad viene del vapor del baño y no de un caño.'],
+        tipo: 'resultado', nivel: 'verde', titulo: 'Parece condensación del baño',
+        sabemos: ['La prueba indica que la humedad viene del vapor del baño y no de un caño.'],
+        noSabemos: ['La prueba es orientativa y no descarta del todo una filtración. Si la mancha vuelve aunque ventiles bien, pedí que la vea un sanitario.'],
         ahora: [
           'Dejá la puerta abierta y el extractor prendido un rato después de bañarte.',
           'Para limpiar el moho, usá lavandina diluida en agua, con guantes y el baño ventilado. No la mezcles con otros productos.'
@@ -364,8 +364,8 @@ const CASOS = {
       },
       r_filtracion: {
         tipo: 'resultado', nivel: 'amarillo', titulo: 'Pedí ayuda, sin dejarlo pasar',
-        sabemos: ['La humedad viene de adentro del techo. Puede ser un caño o una filtración desde arriba.'],
-        noSabemos: ['De dónde viene exactamente. Lo tiene que ver un sanitario.'],
+        sabemos: ['La prueba indica que la humedad viene de adentro del techo, por un caño o una filtración desde arriba.'],
+        noSabemos: ['La prueba es orientativa. Si es una filtración y de dónde viene lo tiene que confirmar un sanitario.'],
         recomendacion: 'Pedí un sanitario.',
         porque: 'Cuanto más tiempo pasa, más grande se hace el daño.',
         profesional: 'Sanitario', costo: '$ 1.500 a $ 3.500 la visita',
@@ -560,9 +560,7 @@ const PANTALLAS = {
       <button data-alq="si">Sí, alquilo</button>
       <button data-alq="no">No, es propia o de mi familia</button>`);
     app.querySelectorAll('[data-alq]').forEach(b => b.onclick = () => {
-      ctx.alquila = b.dataset.alq === 'si';
-      ctx.respuestas.push({ p: '¿Alquila?', r: ctx.alquila ? 'Sí' : 'No' });
-      registrar('alquiler', ctx.alquila ? 'alquila' : 'propia');
+      responderAlquiler(b.dataset.alq === 'si');
       ir('resultado', { id: args.id, nota: args.nota });
     });
   },
@@ -601,7 +599,12 @@ const PANTALLAS = {
       html += `</div>`;
     }
     if (r.repararReemplazar) html += `<h2>¿Reparar o reemplazar?</h2><div class="tarjeta"><p>${esc(r.repararReemplazar)}</p><p class="notas">Criterio orientativo.</p></div>`;
-    if (r.alquiler && ctx.alquila) html += `<h2>Si alquilás</h2><div class="tarjeta"><p>${esc(r.alquiler)}</p><p class="notas">Es una orientación general, no asesoramiento legal. Revisá tu contrato y avisá antes de arreglar o pagar algo.</p></div>`;
+    const tarjetaAlquiler = `<h2>Si alquilás</h2><div class="tarjeta"><p>${esc(r.alquiler)}</p><p class="notas">Es una orientación general, no asesoramiento legal. Revisá tu contrato y avisá antes de arreglar o pagar algo.</p></div>`;
+    if (r.alquiler && ctx.alquila) html += tarjetaAlquiler;
+    if (r.alquiler && ctx.alquila === null && CASOS[ctx.caso]?.preguntarAlquiler) {
+      html += `<div id="alquiler"><h2>¿Alquilás la casa o el apartamento?</h2><p class="ayuda">Cambia a quién le toca resolverlo.</p>
+        <button data-alqres="si">Sí, alquilo</button><button data-alqres="no">No, es propia o de mi familia</button></div>`;
+    }
 
     html += `<button data-accion="ficha">Armar la ficha del problema para mandarla</button>`;
     if (r.segundaOpinion) html += `<button data-accion="segunda">Pedir una segunda opinión a un técnico</button>`;
@@ -610,6 +613,11 @@ const PANTALLAS = {
     app.querySelector('[data-accion="pasos"]')?.addEventListener('click', () => ir('paso', { id: args.id, i: 0 }));
     app.querySelector('[data-accion="segunda"]')?.addEventListener('click', () => ir('segunda', { id: args.id }));
     app.querySelectorAll('[data-alarma]').forEach(b => b.onclick = () => ir('resultado', { id: b.dataset.alarma }));
+    app.querySelectorAll('[data-alqres]').forEach(b => b.onclick = () => {
+      responderAlquiler(b.dataset.alqres === 'si');
+      const bloque = app.querySelector('#alquiler');
+      if (ctx.alquila) bloque.outerHTML = tarjetaAlquiler; else bloque.remove();
+    });
   },
 
   paso(args) {
@@ -769,10 +777,16 @@ function empezarCaso(id, desde) {
   avanzar(CASOS[id].inicio);
 }
 
+function responderAlquiler(alquila) {
+  ctx.alquila = alquila;
+  ctx.respuestas.push({ p: '¿Alquila?', r: alquila ? 'Sí' : 'No' });
+  registrar('alquiler', alquila ? 'alquila' : 'propia');
+}
+
 function avanzar(id, nota) {
   const n = nodo(id);
   if (n.tipo === 'pregunta') { ir('pregunta', { id }); return; }
-  if (CASOS[ctx.caso]?.preguntarAlquiler && ctx.alquila === null && !n.urgente) { ir('alquiler', { id, nota }); return; }
+  if (CASOS[ctx.caso]?.preguntarAlquiler && ctx.alquila === null && n.nivel !== 'rojo') { ir('alquiler', { id, nota }); return; }
   ir('resultado', { id, nota });
 }
 
